@@ -5,10 +5,6 @@
 #include <string.h> // strcmp, strcasecmp
 #include <stdlib.h>	// strtod, strtol
 
-#include "gamelib_render.h"
-#include "log_manager.h"
-
-
 namespace M4 {
 
 // Engine/String.cpp
@@ -86,7 +82,7 @@ void Log_Error(const char * format, ...) {
 }
 
 void Log_ErrorArgList(const char * format, va_list args) {
-    Log::print_valist(format, args);
+    vprintf(format, args);
 }
 
 

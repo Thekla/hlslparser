@@ -2,7 +2,7 @@
 #define ENGINE_H
 
 #include <stdarg.h> // va_list, vsnprintf
-#include <malloc.h> // malloc
+#include <stdlib.h> // malloc
 #include <new> // for placement new
 
 #ifndef NULL
