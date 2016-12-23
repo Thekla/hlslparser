@@ -207,6 +207,11 @@ bool GLSLGenerator::Generate(HLSLTree* tree, Target target, Version version, con
     {
         m_writer.WriteLine(0, "#version 150");
     }
+	else if (m_version == Version_450)
+	{
+		m_writer.WriteLine(0, "#version 450");
+		m_writer.WriteLine(0, "#extension GL_ARB_separate_shader_objects : enable");
+	}
     else if (m_version == Version_100_ES)
     {
         m_writer.WriteLine(0, "#version 100");
@@ -310,8 +315,8 @@ bool GLSLGenerator::Generate(HLSLTree* tree, Target target, Version version, con
     // Output the special function used to emulate tex2DMSfetch.
     if (m_tree->NeedsFunction("tex2DMSfetch"))
     {
-        m_writer.WriteLine(0, "vec4 tex2DMSfetch(sampler2DMS samp, ivec2 texCoord, int sample) {");
-        m_writer.WriteLine(1, "return texelFetch(samp, texCoord, sample);");
+        m_writer.WriteLine(0, "vec4 tex2DMSfetch(sampler2DMS samp, ivec2 texCoord, int smpIndex) {");
+        m_writer.WriteLine(1, "return texelFetch(samp, texCoord, smpIndex);");
         m_writer.WriteLine(0, "}");
     }
 
@@ -398,8 +403,13 @@ bool GLSLGenerator::Generate(HLSLTree* tree, Target target, Version version, con
         if (!m_outputTargets)
             Error("Fragment shader must output a color");
 
-        if (!m_versionLegacy)
-            m_writer.WriteLine(0, "out vec4 rast_FragData[%d];", m_outputTargets);
+		if (!m_versionLegacy)
+		{
+			if (m_version == Version_450)
+				m_writer.WriteLine(0, "layout(location=0) out vec4 rast_FragData[%d];", m_outputTargets);
+			else
+				m_writer.WriteLine(0, "out vec4 rast_FragData[%d];", m_outputTargets);
+		}
     }
 
     OutputStatements(0, statement);
@@ -991,7 +1001,10 @@ void GLSLGenerator::OutputStatements(int indent, HLSLStatement* statement, const
                 if (indent == 0)
                 {
                     // At the top level, we need the "uniform" keyword.
-                    m_writer.Write("uniform ");
+					if (IsSamplerType(declaration->type.baseType) && m_version == Version_450)
+						m_writer.Write("layout (set=1,binding=%s) uniform ", declaration->registerName + 1);
+					else
+						m_writer.Write("uniform ");
                 }
                 OutputDeclaration(declaration);
                 m_writer.EndLine(";");
@@ -1145,7 +1158,10 @@ void GLSLGenerator::OutputBuffer(int indent, HLSLBuffer* buffer)
     }
     else
     {
-        m_writer.WriteLineTagged(indent, buffer->fileName, buffer->line, "layout (std140) uniform %s%s {", m_options.constantBufferPrefix, buffer->name);
+		if (m_version == Version_450)
+			m_writer.WriteLineTagged(indent, buffer->fileName, buffer->line, "layout (binding=%s,std140) uniform %s%s {", buffer->registerName + 1, m_options.constantBufferPrefix, buffer->name);
+		else
+			m_writer.WriteLineTagged(indent, buffer->fileName, buffer->line, "layout (std140) uniform %s%s {", m_options.constantBufferPrefix, buffer->name);
         HLSLDeclaration* field = buffer->field;
         while (field != NULL)
         {
@@ -1546,10 +1562,33 @@ void GLSLGenerator::OutputAttribute(const HLSLType& type, const char* semantic, 
         HLSLStruct* structDeclaration = FindStruct(root, type.typeName);
         ASSERT(structDeclaration != NULL);
         HLSLStructField* field = structDeclaration->field;
+
+		unsigned attrIndex = 0;
         while (field != NULL)
         {
             if (field->semantic != NULL && GetBuiltInSemantic(field->semantic, modifier) == NULL)
             {
+				if (m_options.attributeCallback && modifier == AttributeModifier_In && m_target == Target_VertexShader)
+				{
+					const char* semanticIndex = field->semantic;
+					while (*semanticIndex && !isdigit(*semanticIndex))
+						semanticIndex++;
+
+					char name[64];
+					ASSERT(length < sizeof(name));
+
+					strncpy(name, field->semantic, semanticIndex - field->semantic);
+					name[semanticIndex - field->semantic] = 0;
+
+					int attribute = m_options.attributeCallback(name, atoi(semanticIndex));
+
+					if (attribute >= 0)
+						m_writer.Write("layout(location=%d) ", attribute);
+				}
+				else if (((modifier == AttributeModifier_Out && m_target == Target_VertexShader) || (modifier == AttributeModifier_In && m_target == Target_FragmentShader)) && m_version == Version_450)
+				{
+					m_writer.Write("layout(location=%d) ", attrIndex);
+				}
                 m_writer.Write( "%s ", qualifier );
 				char attribName[ 64 ];
 				String_Printf( attribName, 64, "%s%s", prefix, field->semantic );
@@ -1557,6 +1596,7 @@ void GLSLGenerator::OutputAttribute(const HLSLType& type, const char* semantic, 
 				m_writer.EndLine(";");
             }
             field = field->nextField;
+			attrIndex++;
         }
     }
     else if (semantic != NULL && GetBuiltInSemantic(semantic, modifier) == NULL)
@@ -1604,8 +1644,13 @@ void GLSLGenerator::OutputSetOutAttribute(const char* semantic, const char* resu
                 // We also need to convert the normalized device
                 // coordinates from the D3D convention of 0 to 1 to the
                 // OpenGL convention of -1 to 1.
-                m_writer.WriteLine(1, "vec4 temp = %s;", resultName);
-                m_writer.WriteLine(1, "%s = temp * vec4(1,-1,2,1) - vec4(0,0,temp.w,0);", builtInSemantic);
+				if (m_version == Version_450)
+					m_writer.WriteLine(1, "%s = %s * vec4(1,-1,1,1);", builtInSemantic, resultName);
+				else
+				{
+					m_writer.WriteLine(1, "vec4 temp = %s;", resultName);
+					m_writer.WriteLine(1, "%s = temp * vec4(1,-1,2,1) - vec4(0,0,temp.w,0);", builtInSemantic);
+				}
             }
             else
             {

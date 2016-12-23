@@ -31,6 +31,7 @@ public:
         Version_110, // OpenGL 2.0
         Version_140, // OpenGL 3.1
         Version_150, // OpenGL 3.2
+		Version_450, // OpenGL 4.5
         Version_100_ES, // OpenGL ES 2.0
         Version_300_ES, // OpenGL ES 3.0
     };
@@ -47,11 +48,13 @@ public:
     {
         unsigned int flags;
         const char* constantBufferPrefix;
+		int(*attributeCallback)(const char* name, unsigned int index);
 
         Options()
         {
             flags = 0;
             constantBufferPrefix = "";
+			attributeCallback = nullptr;
         }
     };
 
