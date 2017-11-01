@@ -623,6 +623,7 @@ void HLSLTokenizer::GetTokenName(int token, char buffer[s_maxIdentifier])
             break;
         case HLSLToken_EndOfStream:
             strcpy(buffer, "<eof>");
+			break;
         default:
             strcpy(buffer, "unknown");
             break;
