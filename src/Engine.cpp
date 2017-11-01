@@ -125,8 +125,12 @@ static char *mprintf_valist(int size, const char *fmt, va_list args) {
     va_list tmp;
 
     while (1) {
-        res = new char[size];
-        if (!res) return NULL;
+		try {
+			res = new char[size];
+		}
+		catch (std::bad_alloc& ba) {
+			return NULL;
+		}
 
         va_copy(tmp, args);
         int len = vsnprintf(res, size, fmt, tmp);
